@@ -1,0 +1,25 @@
+# editor state
+.cache/
+.idea/
+.vs/
+.vscode/
+.clangd/
+
+# xmake
+.xmake/
+build/
+vsxmake*/
+compile_commands.json
+artifacts/
+
+# archives
+*.zip
+
+# local temp files
+*.log
+*.sarif
+scratch/
+
+# git worktrees
+.worktrees/
+
