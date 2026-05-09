@@ -12,7 +12,6 @@ namespace
 {
 	constexpr std::uint64_t kTESFormGetEditorIDSE = 10827;
 	constexpr std::uint64_t kTESFormGetEditorIDAE = 10879;
-	constexpr std::size_t kTESFormGetEditorIDVR = 0x107430;
 	constexpr std::uint64_t kTESFormSetEditorIDSE = 10883;
 	constexpr std::uint64_t kTESFormSetEditorIDAE = 10926;
 	constexpr std::uint64_t kTESObjectREFRGetEditorIDSE = 19351;
@@ -21,10 +20,6 @@ namespace
 	constexpr std::uint64_t kFormStringHashTableInsertSE = 13833;
 	constexpr std::uint64_t kFormStringHashTableInsertAE = 13808;
 	constexpr std::size_t kFormStringHashTableInsertVR = 0x1895A0;
-	constexpr std::uint64_t kEditorIDHashTablePtrSE = 514352;
-	constexpr std::uint64_t kEditorIDHashTablePtrAE = 400509;
-	constexpr std::uint64_t kEditorIDHashTableLockSE = 514361;
-	constexpr std::uint64_t kEditorIDHashTableLockAE = 400518;
 	constexpr std::size_t kBranchHookTrampolineSize = 14;
 	constexpr std::size_t kDirectHookPatchSize = 5;
 	struct PreparedSetterHook
@@ -43,8 +38,6 @@ namespace
 	struct NativePublicationTargets
 	{
 		std::uintptr_t insertTarget = 0;
-		std::uintptr_t tablePointerAddress = 0;
-		std::uintptr_t lockAddress = 0;
 	};
 
 	struct TraceConfig
@@ -111,14 +104,6 @@ namespace
 		return reinterpret_cast<const void*>(address);  // NOLINT(performance-no-int-to-ptr)
 	}
 
-	template <class T>
-	[[nodiscard]] T ReadAddress(std::uintptr_t address)
-	{
-		T value{};
-		std::memcpy(&value, AddressAsPointer(address), sizeof(value));
-		return value;
-	}
-
 	[[nodiscard]] const char* GetSourceName(const RE::TESForm* form)
 	{
 		if (form == nullptr) {
@@ -167,7 +152,8 @@ namespace
 		return prepared;
 	}
 
-	[[nodiscard]] PreparedDirectHook PrepareDirectHook(const REL::VariantID& id, std::string_view label)
+	template <class RelocationID>
+	[[nodiscard]] PreparedDirectHook PrepareDirectHook(const RelocationID& id, std::string_view label)
 	{
 		REL::Relocation<std::uintptr_t> target{ id };
 		if (target.address() == 0) {
@@ -184,23 +170,11 @@ namespace
 	[[nodiscard]] NativePublicationTargets PrepareNativePublicationTargets()
 	{
 		REL::Relocation<std::uintptr_t> insertTarget{ REL::VariantID(kFormStringHashTableInsertSE, kFormStringHashTableInsertAE, kFormStringHashTableInsertVR) };
-		REL::Relocation<void**> tablePointer{ RELOCATION_ID(kEditorIDHashTablePtrSE, kEditorIDHashTablePtrAE) };
-		REL::Relocation<RE::BSReadWriteLock*> lock{ RELOCATION_ID(kEditorIDHashTableLockSE, kEditorIDHashTableLockAE) };
 		if (insertTarget.address() == 0) {
 			throw std::runtime_error("Failed to resolve native EditorID hash insert target.");
 		}
-		if (tablePointer.address() == 0) {
-			throw std::runtime_error("Failed to resolve native EditorID hash table pointer.");
-		}
-		if (lock.address() == 0) {
-			throw std::runtime_error("Failed to resolve native EditorID hash lock.");
-		}
 
-		NativePublicationTargets prepared{};
-		prepared.insertTarget = insertTarget.address();
-		prepared.tablePointerAddress = tablePointer.address();
-		prepared.lockAddress = lock.address();
-		return prepared;
+		return { insertTarget.address() };
 	}
 
 	void ApplySetterHook(const PreparedSetterHook& prepared)
@@ -238,11 +212,6 @@ namespace
 		return targets;
 	}
 
-	[[nodiscard]] void* GetNativeEditorIDHashTableBase(const NativePublicationTargets& targets)
-	{
-		return ReadAddress<void*>(targets.tablePointerAddress);
-	}
-
 	void PublishNativeEditorID(
 		RE::TESForm* form,
 		LookupTable::EditorID previousEditorID,
@@ -263,21 +232,16 @@ namespace
 		}
 
 		const auto& targets = GetNativePublicationTargets();
-		auto* const tableBase = GetNativeEditorIDHashTableBase(targets);
-		if (tableBase == nullptr) {
+		const auto& [editorIDMap, editorIDMapLock] = RE::TESForm::GetAllFormsByEditorID();
+		if (editorIDMap == nullptr) {
 			logs::critical("Native EditorID hash table was unavailable while publishing form {:08X}", form->GetFormID());
 			SKSE::stl::report_and_fail("Native EditorID Fix VR expected the native EditorID hash table to be available.");
 		}
 
-		auto* const lock = reinterpret_cast<RE::BSReadWriteLock*>(targets.lockAddress);
-		if (lock == nullptr) {
-			logs::critical("Native EditorID hash lock was unavailable while publishing form {:08X}", form->GetFormID());
-			SKSE::stl::report_and_fail("Native EditorID Fix VR expected the native EditorID hash lock to be available.");
-		}
-
 		bool published = false;
 		{
-			RE::BSWriteLockGuard writeLock{ *lock };
+			RE::BSWriteLockGuard writeLock{ editorIDMapLock };
+			auto* const tableBase = reinterpret_cast<void*>(editorIDMap);
 			if (REL::Module::IsAE()) {
 				using NativeInsert = bool (*)(void*, const RE::BSFixedString&, const RE::TESForm*&, RE::TESForm*&);
 				RE::BSFixedString editorID{ *currentEditorID };
@@ -420,7 +384,7 @@ namespace Hooks::Lookup
 		if (mode != LookupMode::Value::ExternalOnly) {
 			if (!tesFormGetterInstalled) {
 				tesFormGetterToInstall = PrepareDirectHook(
-					REL::VariantID(kTESFormGetEditorIDSE, kTESFormGetEditorIDAE, kTESFormGetEditorIDVR),
+					RELOCATION_ID(kTESFormGetEditorIDSE, kTESFormGetEditorIDAE),
 					"TESForm::GetFormEditorID");
 			}
 			if (!referenceGetterInstalled) {
@@ -437,10 +401,8 @@ namespace Hooks::Lookup
 		try {
 			if (publicationTargetsToValidate) {
 				logs::info(
-					"Resolved native EditorID publication targets (insert=0x{:X}, table_ptr=0x{:X}, lock=0x{:X})",
-					publicationTargetsToValidate->insertTarget,
-					publicationTargetsToValidate->tablePointerAddress,
-					publicationTargetsToValidate->lockAddress);
+					"Resolved native EditorID publication target (insert=0x{:X})",
+					publicationTargetsToValidate->insertTarget);
 				nativePublicationTargetsValidated = true;
 				publicationTargetsValidatedThisRun = true;
 			}

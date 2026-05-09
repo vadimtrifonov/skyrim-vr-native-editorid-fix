@@ -35,6 +35,9 @@ namespace
 	struct VrFormattingCallSite
 	{
 		std::size_t rva;
+		REL::ID containingId;
+		std::ptrdiff_t offset;
+		bool useContainingId;
 		FormattingBufferSize bufferSize;
 		std::string_view label;
 	};
@@ -141,15 +144,15 @@ namespace
 			// Validated unbounded formatting call sites for Skyrim VR 1.4.15.0.
 			// These addresses are RVAs of the 6-byte indirect-call instruction sites; the call bytes are re-read before patching.
 			// The already-bounded call-site RVAs at 0xA043C3, 0xA04423, 0xA121E3, 0xF32587, and 0xF32683 are intentionally excluded.
-			VrFormattingCallSite{ 0x10A7D4, FormattingBufferSize::Normal, "VR normal formatting call 0 (0x10A7D4)" },
-			VrFormattingCallSite{ 0x189934, FormattingBufferSize::Normal, "VR normal formatting call 1 (0x189934)" },
-			VrFormattingCallSite{ 0x1E54B8, FormattingBufferSize::Normal, "VR normal formatting call 2 (0x1E54B8)" },
-			VrFormattingCallSite{ 0x2FF0B0, FormattingBufferSize::Normal, "VR normal formatting call 3 (0x2FF0B0)" },
-			VrFormattingCallSite{ 0x336564, FormattingBufferSize::Normal, "VR normal formatting call 4 (0x336564)" },
-			VrFormattingCallSite{ 0x58BB1B, FormattingBufferSize::Normal, "VR normal formatting call 5 (0x58BB1B)" },
-			VrFormattingCallSite{ 0x886ECB, FormattingBufferSize::Normal, "VR normal formatting call 6 (0x886ECB)" },
-			VrFormattingCallSite{ 0xA04498, FormattingBufferSize::Normal, "VR normal formatting call 7 (0xA04498)" },
-			VrFormattingCallSite{ 0x33852A, FormattingBufferSize::Small, "VR small formatting call (0x33852A)" }
+			VrFormattingCallSite{ 0x10A7D4, REL::ID(0), 0, false, FormattingBufferSize::Normal, "VR normal formatting call 0 (0x10A7D4)" },
+			VrFormattingCallSite{ 0x189934, REL::ID(0), 0, false, FormattingBufferSize::Normal, "VR normal formatting call 1 (0x189934)" },
+			VrFormattingCallSite{ 0x1E54B8, REL::ID(0), 0, false, FormattingBufferSize::Normal, "VR normal formatting call 2 (0x1E54B8)" },
+			VrFormattingCallSite{ 0x2FF0B0, REL::ID(0), 0, false, FormattingBufferSize::Normal, "VR normal formatting call 3 (0x2FF0B0)" },
+			VrFormattingCallSite{ 0x336564, REL::ID(0), 0, false, FormattingBufferSize::Normal, "VR normal formatting call 4 (0x336564)" },
+			VrFormattingCallSite{ 0x58BB1B, REL::ID(0), 0, false, FormattingBufferSize::Normal, "VR normal formatting call 5 (0x58BB1B)" },
+			VrFormattingCallSite{ 0, REL::ID(50180), 0xDB, true, FormattingBufferSize::Normal, "VR normal formatting call 6 (50180 + 0xDB)" },
+			VrFormattingCallSite{ 0xA04498, REL::ID(0), 0, false, FormattingBufferSize::Normal, "VR normal formatting call 7 (0xA04498)" },
+			VrFormattingCallSite{ 0x33852A, REL::ID(0), 0, false, FormattingBufferSize::Small, "VR small formatting call (0x33852A)" }
 		};
 		return kSites;
 	}
@@ -162,7 +165,15 @@ namespace
 			const auto vrSites = GetVRFormattingCallSites();
 			sites.reserve(vrSites.size());
 			for (const auto& site : vrSites) {
-				sites.push_back({ REL::Offset(site.rva).address(), site.bufferSize, site.label });
+				std::uintptr_t target = 0;
+				if (site.useContainingId) {
+					const REL::Relocation<std::uintptr_t> relocation{ site.containingId, site.offset };
+					target = relocation.address();
+				} else {
+					target = REL::Offset(site.rva).address();
+				}
+
+				sites.push_back({ target, site.bufferSize, site.label });
 			}
 			return sites;
 		}

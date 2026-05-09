@@ -17,28 +17,29 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $enterDevShell = Join-Path $PSScriptRoot "Enter-DevShell.ps1"
-$submoduleRoot = Join-Path $repoRoot "lib/commonlibsse-ng"
+$submoduleRoot = Join-Path $repoRoot "lib/commonlibvr"
 
 function Get-ExpectedCommonLibCommit
 {
-    $entry = (& git -C $repoRoot ls-files --stage -- lib/commonlibsse-ng | Select-Object -First 1)
+    $submodulePath = "lib/commonlibvr"
+    $entry = (& git -C $repoRoot ls-files --stage -- $submodulePath | Select-Object -First 1)
     if ($entry) {
         $parts = $entry -split '\s+'
         if ($parts.Count -ge 2) {
             return $parts[1]
         }
 
-        throw "Unexpected ls-files output for lib/commonlibsse-ng: $entry"
+        throw "Unexpected ls-files output for ${submodulePath}: $entry"
     }
 
-    $entry = & git -C $repoRoot ls-tree HEAD lib/commonlibsse-ng
+    $entry = & git -C $repoRoot ls-tree HEAD $submodulePath
     if (-not $entry) {
-        throw "Could not read the pinned CommonLibSSE-NG submodule entry from the index or HEAD."
+        throw "Could not read the pinned CommonLibVR submodule entry from the index or HEAD."
     }
 
     $parts = $entry -split '\s+'
     if ($parts.Count -lt 3) {
-        throw "Unexpected ls-tree output for lib/commonlibsse-ng: $entry"
+        throw "Unexpected ls-tree output for ${submodulePath}: $entry"
     }
 
     return $parts[2]
@@ -47,18 +48,18 @@ function Get-ExpectedCommonLibCommit
 function Assert-CommonLibSubmoduleReady
 {
     if (-not (Test-Path -LiteralPath $submoduleRoot)) {
-        throw "Missing lib/commonlibsse-ng. Run 'git submodule update --init --recursive'."
+        throw "Missing CommonLibVR submodule at lib/commonlibvr. Run 'git submodule update --init --recursive'."
     }
 
     $gitDir = Join-Path $submoduleRoot ".git"
     if (-not (Test-Path -LiteralPath $gitDir)) {
-        throw "lib/commonlibsse-ng is not initialized as a submodule. Run 'git submodule update --init --recursive'."
+        throw "lib/commonlibvr is not initialized as the CommonLibVR submodule. Run 'git submodule update --init --recursive'."
     }
 
     $expectedCommit = Get-ExpectedCommonLibCommit
     $actualCommit = (& git -C $submoduleRoot rev-parse HEAD).Trim()
     if ($actualCommit -ne $expectedCommit) {
-        throw "lib/commonlibsse-ng is at $actualCommit but the repo pins $expectedCommit. Sync the submodule before building."
+        throw "CommonLibVR submodule at lib/commonlibvr is at $actualCommit but the repo pins $expectedCommit. Sync the submodule before building."
     }
 }
 

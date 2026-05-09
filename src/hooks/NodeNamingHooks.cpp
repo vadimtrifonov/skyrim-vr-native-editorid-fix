@@ -8,6 +8,7 @@
 #include <array>
 #include <cstring>
 #include <span>
+#include <variant>
 #include <vector>
 
 namespace
@@ -77,9 +78,11 @@ namespace
 		return std::span<const std::uint8_t>{ bytes.data(), bytes.size() };
 	}
 
+	using NodeNamingAnchor = std::variant<REL::RelocationID, REL::VariantID>;
+
 	struct NodeNamingPatchSite
 	{
-		REL::VariantID id;
+		NodeNamingAnchor id;
 		REL::VariantOffset offset;
 		std::string_view label;
 		std::string_view confidence;
@@ -124,10 +127,10 @@ namespace
 	[[nodiscard]] std::array<NodeNamingPatchSite, 6> GetNodeNamingPatchSites()
 	{
 		return {
-			// VR function offsets were derived from skyrim_vr_address_library/addrlib.csv.
+			// Use VR Address Library IDs where available; remaining VR function offsets were derived from skyrim_vr_address_library/addrlib.csv.
 			// VR local offsets below were validated against Skyrim VR 1.4.15.0.
 			NodeNamingPatchSite{
-				REL::VariantID(15501, 15678, 0x1D7450),
+				NodeNamingAnchor{ REL::RelocationID(15501, 15678) },
 				REL::VariantOffset(0x71B, 0x7FD, 0x71B),
 				"AttachArmorAddon node naming call A (15501 + 0x71B)",
 				"medium",
@@ -135,7 +138,7 @@ namespace
 				kCallViaRax190,
 				AsByteSpan(kValidationSuffix1D7B6B) },
 			NodeNamingPatchSite{
-				REL::VariantID(15501, 15678, 0x1D7450),
+				NodeNamingAnchor{ REL::RelocationID(15501, 15678) },
 				REL::VariantOffset(0x734, 0x816, 0x734),
 				"AttachArmorAddon node naming call B (15501 + 0x734)",
 				"medium",
@@ -175,6 +178,15 @@ namespace
 				kCallViaRax190,
 				AsByteSpan(kValidationSuffix1DA6B6) },
 		};
+	}
+
+	[[nodiscard]] std::uintptr_t ResolveNodeNamingPatchTarget(const NodeNamingPatchSite& site)
+	{
+		return std::visit(
+			[&site](const auto& id) {
+				return REL::Relocation<std::uintptr_t>{ id, site.offset }.address();
+			},
+			site.id);
 	}
 
 	[[nodiscard]] std::uintptr_t GetEmptyStringAddress()
@@ -229,8 +241,8 @@ namespace
 
 		prepared.emptyString = emptyString;
 		for (const auto& site : sites) {
-			const REL::Relocation<std::uintptr_t> target{ site.id, site.offset };
-			if (target.address() == 0) {
+			const auto targetAddress = ResolveNodeNamingPatchTarget(site);
+			if (targetAddress == 0) {
 				logs::warn(
 					"Skipping node naming compatibility patch because {} could not be resolved for this runtime",
 					site.label);
@@ -238,28 +250,28 @@ namespace
 			}
 
 			PlannedNodeNamingPatch plannedPatch{};
-			plannedPatch.target = target.address();
-			plannedPatch.patch = MakeNodeNamingPatch(target.address(), emptyString);
+			plannedPatch.target = targetAddress;
+			plannedPatch.patch = MakeNodeNamingPatch(targetAddress, emptyString);
 			plannedPatch.label = site.label;
 			plannedPatch.confidence = site.confidence;
 
-			const auto actualOriginal = TryReadBytes(textSegment, { target.address(), plannedPatch.original.size() });
+			const auto actualOriginal = TryReadBytes(textSegment, { targetAddress, plannedPatch.original.size() });
 			if (!actualOriginal) {
-				LogUnreadableValidationWindow(site.label, "target", target.address(), plannedPatch.original.size(), textSegment);
+				LogUnreadableValidationWindow(site.label, "target", targetAddress, plannedPatch.original.size(), textSegment);
 				continue;
 			}
 			std::copy(actualOriginal->begin(), actualOriginal->end(), plannedPatch.original.begin());
 
 			if (REL::Module::IsVR()) {
-				const auto prefixAddress = CheckedSub(target.address(), site.expectedPrefix.size());
+				const auto prefixAddress = CheckedSub(targetAddress, site.expectedPrefix.size());
 				if (!prefixAddress) {
-					LogUnreadableValidationWindow(site.label, "prefix", target.address(), site.expectedPrefix.size(), textSegment);
+					LogUnreadableValidationWindow(site.label, "prefix", targetAddress, site.expectedPrefix.size(), textSegment);
 					continue;
 				}
 
-				const auto suffixAddress = CheckedAdd(target.address(), plannedPatch.original.size());
+				const auto suffixAddress = CheckedAdd(targetAddress, plannedPatch.original.size());
 				if (!suffixAddress) {
-					LogUnreadableValidationWindow(site.label, "suffix", target.address(), site.expectedSuffix.size(), textSegment);
+					LogUnreadableValidationWindow(site.label, "suffix", targetAddress, site.expectedSuffix.size(), textSegment);
 					continue;
 				}
 

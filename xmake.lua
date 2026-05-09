@@ -1,22 +1,24 @@
+set_xmakever("3.0.0")
+
 add_defines(
     "_WIN32_WINNT=0x0A00",
     "WINVER=0x0A00"
 )
 
-local commonlib_root = path.absolute("lib/commonlibsse-ng")
-if not os.isdir(commonlib_root) then
-    raise("CommonLibSSE-NG is missing at '" .. commonlib_root .. "'. This repo expects that directory to be populated by Git submodules. Run 'git submodule update --init --recursive'.")
+local commonlibvr_root = path.absolute("lib/commonlibvr")
+if not os.isdir(commonlibvr_root) then
+    raise("CommonLibVR is missing at '" .. commonlibvr_root .. "'. Run 'git submodule update --init --recursive'.")
 end
 
-local commonlib_xmake = path.join(commonlib_root, "xmake.lua")
-if not os.isfile(commonlib_xmake) then
-    raise("CommonLibSSE-NG at '" .. commonlib_root .. "' is incomplete. Expected xmake project at '" .. commonlib_xmake .. "'. Re-run 'git submodule update --init --recursive'.")
+local commonlibvr_xmake = path.join(commonlibvr_root, "xmake.lua")
+if not os.isfile(commonlibvr_xmake) then
+    raise("CommonLibVR at '" .. commonlibvr_root .. "' is incomplete. Expected xmake project at '" .. commonlibvr_xmake .. "'.")
 end
 
-includes(commonlib_root)
+includes(commonlibvr_root)
 
 set_project("Native EditorID Fix VR")
-set_version("1.0.0")
+set_version("1.1.0")
 set_languages("c++23")
 set_policy("package.requires_lock", true)
 

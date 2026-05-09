@@ -1,6 +1,6 @@
 # Native EditorID Fix VR
 
-[CommonLibSSE-NG](https://github.com/CharmedBaryon/CommonLibSSE-NG) port of the original [Native EditorID Fix](https://www.nexusmods.com/skyrimspecialedition/mods/85260), built primarily for **Skyrim VR**.
+[CommonLibVR](https://github.com/alandtse/CommonLibVR) port of the original [Native EditorID Fix](https://www.nexusmods.com/skyrimspecialedition/mods/85260), built primarily for **Skyrim VR**.
 
 `EditorID` is the Creation Kit record identifier, for example `GuardWhiterun` or `RecipeArmorIronDagger`. Skyrim does not preserve or expose those identifiers consistently at runtime; this plugin restores that behavior for runtime code and SKSE plugins.
 
@@ -11,8 +11,8 @@ The DLL remains `NativeEditorIDFix.dll`, so mods that depend on the original Nat
 | Runtime | Status | Recommendation |
 | --- | --- | --- |
 | Skyrim VR `1.4.15` | Primary target; extensively tested | Use this port |
-| Skyrim SE `1.5.97` | Technically supported by the CommonLibSSE-NG build | Prefer the original [Native EditorID Fix](https://www.nexusmods.com/skyrimspecialedition/mods/85260) |
-| Skyrim AE `1.6.1170` / GOG `1.6.1179` | Technically supported by the CommonLibSSE-NG build | Prefer the original [Native EditorID Fix](https://www.nexusmods.com/skyrimspecialedition/mods/85260) |
+| Skyrim SE `1.5.97` | Technically supported by the CommonLibVR build | Prefer the original [Native EditorID Fix](https://www.nexusmods.com/skyrimspecialedition/mods/85260) |
+| Skyrim AE `1.6.1170` / GOG `1.6.1179` | Technically supported by the CommonLibVR build | Prefer the original [Native EditorID Fix](https://www.nexusmods.com/skyrimspecialedition/mods/85260) |
 
 ## Requirements
 
